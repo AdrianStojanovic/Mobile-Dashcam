@@ -9,6 +9,7 @@ readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "websockets (>=15.0.1,<16.0.0)",
+    "ultralytics (>=8.3.86,<9.0.0)",
 ]
 
 
