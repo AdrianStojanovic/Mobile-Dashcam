@@ -5,7 +5,7 @@ from ultralytics import YOLO
 # Please keep also in mind that yolo object classification is inaccurate, thats why it is only being used for object detection.
 
 model = YOLO("trained_model.pt")
-results = model("C:/Users/stoja/Development/YOLO_Data/Yolo_Training/images/test", save=True) 
+results = model("[test image folder path]", save=True) #insert your test image folder path here
 
 for r in results:
     for box in r.boxes:
