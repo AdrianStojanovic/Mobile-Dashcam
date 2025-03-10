@@ -1,0 +1,18 @@
+[project]
+name = "mobile-dashcam"
+version = "0.1.0"
+description = ""
+authors = [
+    {name = "AdrianStojanovic",email = "80412698+AdrianStojanovic@users.noreply.github.com"}
+]
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "websockets (>=15.0.1,<16.0.0)",
+    "ultralytics (>=8.3.86,<9.0.0)",
+]
+
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
