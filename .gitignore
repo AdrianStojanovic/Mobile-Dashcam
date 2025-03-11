@@ -1,1 +1,4 @@
 _pycache_/
+backend/service/__pycache__/__init__.cpython-311.pyc
+backend/service/__pycache__/constants.cpython-311.pyc
+backend/service/__pycache__/execute_object_classification.cpython-311.pyc
