@@ -10,7 +10,7 @@ from ultralytics import YOLO
 from PIL import Image
 from torchvision import models, transforms 
 
-sys.path.append(os.path.abspath("service"))  
+sys.path.append(os.path.abspath("service"))
 from constants import class_names
 from execute_object_classification import process_image, enhance_and_classify
 
@@ -30,61 +30,62 @@ model_mobileNet = load_mobilenet_model("models/mobileNetV2/mobilenetv2_trained_m
 # WebSocket handler expects base64 encoded image
 async def handler(websocket):
     try:
-        full_message = await websocket.recv()
+        async for full_message in websocket: 
+            if not full_message:
+                await websocket.send("no message received")
+                continue
 
-        if not full_message:
-            await websocket.send("no image received")
-            return
+            # Handle image data
+            if '--END-OF-HEADER--' in full_message:
+                header, base64_image = full_message.split('--END-OF-HEADER--', 1)
+            else:
+                await websocket.send("Error while receiving image")
+                continue
 
-        if '--END-OF-HEADER--' in full_message:
-            header, base64_image = full_message.split('--END-OF-HEADER--', 1)
-        else:
-            await websocket.send("Error while receiving image")
-            return
+            header = header.strip()
+            #JSON parsing
+            try:
+                header_data = json.loads(header.strip())
+                nightmode = header_data.get("nightmode", False)
+                print(f"Nightmode: {nightmode}")
+            except json.JSONDecodeError:
+                print("Fehler beim Parsen des Headers")
+                await websocket.send("Fehler beim Parsen des Headers")
+                continue
 
-        header = header.strip()
-        try:
-            header_data = json.loads(header.strip())
-            nightmode = header_data.get("nightmode", False)
-            print(f"Nightmode: {nightmode}")
-        except json.JSONDecodeError:
-            print("Fehler beim Parsen des Headers")
-            await websocket.send("Fehler beim Parsen des Headers")
-            return
+            try:
+                image_data = base64.b64decode(base64_image.strip())
+                print(f"Decoded image data, length: {len(image_data)}")
+            except Exception as e:
+                print(f"Image could not be decoded: {e}")
+                await websocket.send("Image could not be decoded")
+                continue
 
-        try:
-            image_data = base64.b64decode(base64_image.strip())
-            print(f"Decoded image data, length: {len(image_data)}")
-        except Exception as e:
-            print(f"image could not be decoded: {e}")
-            await websocket.send("image could not be decoded")
-            return
+            try:
+                image = Image.open(io.BytesIO(image_data))
+            except Exception as e:
+                print(f"Image could not be opened: {e}")
+                await websocket.send("Image could not be opened")
+                continue
 
-        try:
-            image = Image.open(io.BytesIO(image_data))
-        except Exception as e:
-            print(f"image could not be opened: {e}")
-            await websocket.send("image could not be opened")
-            return
+            if nightmode:
+                print("Nightmode is active, using image enhancement")
+                detected_classes = enhance_and_classify(image, device, model_yolo, model_mobileNet, class_names)
+            else:
+                print("No nightmode")
+                detected_classes = process_image(image, device, model_yolo, model_mobileNet, class_names)
 
-        if nightmode:
-            print("Nnightmode is active use image enhancement")
-            detected_classes = enhance_and_classify(image, device, model_yolo, model_mobileNet, class_names)
-        else:
-            print("no nightmode")
-            detected_classes = process_image(image, device, model_yolo, model_mobileNet, class_names)
-
-        print(f"Detected classes: {', '.join(detected_classes)}")
-        await websocket.send(f"detected classes: {', '.join(detected_classes)}")
+            print(f"Detected classes: {', '.join(detected_classes)}")
+            await websocket.send(f"Detected classes: {', '.join(detected_classes)}")
 
     except Exception as e:
-        print(f"Error while handeling image: {e}")
-        await websocket.send("Error while handeling image")
+        print(f"Error while handling image or message: {e}")
+        await websocket.send("Error while handling message")
 
-# main function to start server
+# Main function to start the server
 async def main():
-    async with websockets.serve(handler, "localhost", 8765):
-        print("Server running on ws://localhost:8765")
-        await asyncio.Future() 
+    server = await websockets.serve(handler, "0.0.0.0", 8765)  # Start the server
+    print("Server running on ws://localhost:8765")
+    await server.wait_closed()  # Wait until the server is closed. Otherwise the server disconnects after every message.
 
 asyncio.run(main())
