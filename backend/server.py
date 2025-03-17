@@ -1,14 +1,14 @@
 import asyncio
 import websockets
-import base64
 import io
 import sys
 import os
 import json
+import struct 
 import torch
 from ultralytics import YOLO
 from PIL import Image
-from torchvision import models, transforms 
+from torchvision import models
 
 sys.path.append(os.path.abspath("service"))
 from constants import class_names
@@ -27,65 +27,62 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 model_yolo = YOLO("models/YOLO/trained_model.pt")
 model_mobileNet = load_mobilenet_model("models/mobileNetV2/mobilenetv2_trained_model.pth", len(class_names), device)
 
-# WebSocket handler expects base64 encoded image
 async def handler(websocket):
     try:
-        async for full_message in websocket: 
+        async for full_message in websocket:
             if not full_message:
-                await websocket.send("no message received")
+                await websocket.send("No message received")
                 continue
 
-            # Handle image data
-            if '--END-OF-HEADER--' in full_message:
-                header, base64_image = full_message.split('--END-OF-HEADER--', 1)
-            else:
-                await websocket.send("Error while receiving image")
+            if not isinstance(full_message, bytes):
+                await websocket.send("Invalid message format")
                 continue
 
-            header = header.strip()
-            #JSON parsing
+            # Read header length from the first 2 bytes
+            header_length = struct.unpack("H", full_message[:2])[0]
+            header_json = full_message[2:2+header_length].decode("utf-8")  # Extract header
+            image_data = full_message[2+header_length:]  
+
+            print(f"Header received (Length: {header_length} bytes)")
+
+            # Parse JSON header
             try:
-                header_data = json.loads(header.strip())
+                header_data = json.loads(header_json)
                 nightmode = header_data.get("nightmode", False)
-                print(f"Nightmode: {nightmode}")
+                print(f"Night mode: {nightmode}")
             except json.JSONDecodeError:
-                print("Fehler beim Parsen des Headers")
-                await websocket.send("Fehler beim Parsen des Headers")
+                print("Error parsing header")
+                await websocket.send("Error parsing header")
                 continue
 
-            try:
-                image_data = base64.b64decode(base64_image.strip())
-                print(f"Decoded image data, length: {len(image_data)}")
-            except Exception as e:
-                print(f"Image could not be decoded: {e}")
-                await websocket.send("Image could not be decoded")
-                continue
-
+            # Open image
             try:
                 image = Image.open(io.BytesIO(image_data))
+                print("Image successfully loaded")
             except Exception as e:
-                print(f"Image could not be opened: {e}")
-                await websocket.send("Image could not be opened")
+                print(f"Error opening image: {e}")
+                await websocket.send("Error opening image")
                 continue
 
+            # Process image based on mode
             if nightmode:
-                print("Nightmode is active, using image enhancement")
+                print("Night mode active ")
                 detected_classes = enhance_and_classify(image, device, model_yolo, model_mobileNet, class_names)
             else:
-                print("No nightmode")
+                print("Standard classification")
                 detected_classes = process_image(image, device, model_yolo, model_mobileNet, class_names)
 
-            print(f"Detected classes: {', '.join(detected_classes)}")
-            await websocket.send(f"Detected classes: {', '.join(detected_classes)}")
+            print(f"{', '.join(detected_classes)}")
+            await websocket.send(f"{', '.join(detected_classes)}")  # Send response
 
     except Exception as e:
-        print(f"Error while handling image or message: {e}")
-        await websocket.send("Error while handling message")
+        print(f"Error processing message: {e}")
+        await websocket.send("Error processing message")
 
-# Main function to start the server
+# Start server
 async def main():
-    server = await websockets.serve(handler, "0.0.0.0", 8765)  # Start the server
+    server = await websockets.serve(handler, "0.0.0.0", 8765, max_size=10_000_000)
     print("Server running on ws://localhost:8765")
-    await server.wait_closed()  # Wait until the server is closed. Otherwise the server disconnects after every message.
+    await server.wait_closed()
 
 asyncio.run(main())
