@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Button, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { CameraView, CameraType, useCameraPermissions, Camera } from 'expo-camera';
+import * as FileSystem from 'expo-file-system';
 import SignDisplay from "@/components/SignDisplay";
 
 export default function App() {
@@ -60,46 +61,36 @@ export default function App() {
       return;
     }
     if (!cameraRef.current) return;
-  
+
     try {
-      const photo = await cameraRef.current.takePictureAsync({ base64: false });
-      //@ts-ignore
-      const response = await fetch(photo.uri);
-      const imageBlob = await response.blob();
-  
-      const imageArrayBuffer = await new Promise<ArrayBuffer>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          if (reader.result instanceof ArrayBuffer) {
-            resolve(reader.result);
-          } else {
-            reject(new Error("Failed to read image as ArrayBuffer"));
-          }
-        };
-        reader.onerror = (error) => reject(error);
-        reader.readAsArrayBuffer(imageBlob);
+      const photo = await cameraRef.current.takePictureAsync({ base64: false, quality: 0.2, shutterSound: false });
+      const imagePath = photo.uri;
+
+      // Use expo-file-system to read the file as binary data
+      const imageData = await FileSystem.readAsStringAsync(imagePath, {
+        encoding: FileSystem.EncodingType.Base64, // Use Base64 encoding for simplicity
       });
-  
+
       const header = JSON.stringify({ nightmode: false });
       const headerBuffer = new TextEncoder().encode(header);
-  
+
       const headerLength = new Uint16Array([headerBuffer.byteLength]);
       const fullBuffer = new Uint8Array(
-        headerLength.byteLength + headerBuffer.byteLength + imageArrayBuffer.byteLength
+        headerLength.byteLength + headerBuffer.byteLength + imageData.length
       );
-  
+
       fullBuffer.set(new Uint8Array(headerLength.buffer), 0);
       fullBuffer.set(headerBuffer, headerLength.byteLength);
-      fullBuffer.set(new Uint8Array(imageArrayBuffer), headerLength.byteLength + headerBuffer.byteLength);
-  
+      fullBuffer.set(new Uint8Array(atob(imageData).split('').map(c => c.charCodeAt(0))), headerLength.byteLength + headerBuffer.byteLength);
+
       console.log("Sending image + metadata to WebSocket...");
       socketRef.current?.send(fullBuffer.buffer);
-  
+
     } catch (error) {
       console.error("Error sending image:", error);
     }
   };
-  
+
   return (
     <View style={styles.container}>
       <View style={styles.cameraContainer}>
