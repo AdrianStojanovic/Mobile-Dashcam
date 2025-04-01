@@ -3,6 +3,7 @@ import os
 import cv2
 import numpy as np
 import torch
+import json
 import torchvision.transforms as transforms
 from torchvision import models
 from PIL import Image
@@ -74,12 +75,12 @@ def process_image(image_pil, device, model_yolo, model_mobileNet, class_names):
     image_bgr = cv2.cvtColor(image_np, cv2.COLOR_RGB2BGR)
 
     results = model_yolo(image_bgr)
-    detected_classes = set()
+    detected_objects = []  
 
     for result in results:
         for i, box in enumerate(result.boxes):
             x1, y1, x2, y2 = map(int, box.xyxy[0])
-            confidence = box.conf[0].item()  # Konfidenz der Erkennung
+            confidence = float(box.conf[0].item())
 
             cropped_img = image_bgr[y1:y2, x1:x2]
 
@@ -88,18 +89,19 @@ def process_image(image_pil, device, model_yolo, model_mobileNet, class_names):
 
                 input_tensor = transform_image(cropped_pil)
                 predicted_class = classify_image(input_tensor, device, class_names, model_mobileNet)
-                detected_classes.add(predicted_class)
                 
-                #cv2.rectangle(image_bgr, (x1, y1), (x2, y2), (0, 255, 0), 3)
-                #label = f"{predicted_class} ({confidence:.2f})"
-                #cv2.putText(image_bgr, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
-
-    #os.makedirs("detections", exist_ok=True)
-    #output_path = os.path.join("detections", "detected_image.jpg")
-    #cv2.imwrite(output_path, image_bgr)
-   #print(f"image stored {output_path}")
+                detected_objects.append({
+                    "class": predicted_class,
+                    "bbox": (x1, y1, x2, y2),
+                    "confidence": confidence
+                })
     
-    return detected_classes
+    for detected_object in detected_objects:
+        detected_object["bbox"] = list(detected_object["bbox"])
+
+    detected_objects_json = json.dumps(detected_objects)
+
+    return detected_objects_json
 
 def enhance_and_classify(image_pil, device, model_yolo, model_mobileNet, class_names):
     enhanced_pil = enhance_image(image_pil, device) 
@@ -107,17 +109,27 @@ def enhance_and_classify(image_pil, device, model_yolo, model_mobileNet, class_n
     image_np = np.array(enhanced_pil)
     image_bgr = cv2.cvtColor(image_np, cv2.COLOR_RGB2BGR)
     results = model_yolo(image_bgr)
-    detected_classes = set()
+    detected_objects = [] 
     
     for result in results:
         for i, box in enumerate(result.boxes):
             x1, y1, x2, y2 = map(int, box.xyxy[0])
+            confidence = float(box.conf[0].item())
             cropped_img = image_bgr[y1:y2, x1:x2]
             
             if cropped_img.shape[0] > 0 and cropped_img.shape[1] > 0:
                 cropped_pil = Image.fromarray(cv2.cvtColor(cropped_img, cv2.COLOR_BGR2RGB))
                 input_tensor = transform_image(cropped_pil)
                 predicted_class = classify_image(input_tensor, device, class_names, model_mobileNet)
-                detected_classes.add(predicted_class)
+                
+                detected_objects.append({
+                    "class": predicted_class,
+                    "bbox": (x1, y1, x2, y2),
+                    "confidence": confidence
+                })
+    for detected_object in detected_objects:
+        detected_object["bbox"] = list(detected_object["bbox"])
+
+    detected_objects_json = json.dumps(detected_objects)
     
-    return detected_classes
+    return detected_objects_json
