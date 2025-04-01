@@ -40,6 +40,7 @@ class MainActivity : AppCompatActivity(), WebSocketCallback {
     private var imageAnalyzer: ImageAnalysis? = null
     private var camera: Camera? = null
     private var cameraProvider: ProcessCameraProvider? = null
+    private val temporarySigns: TemporarySigns by viewModels()
     private lateinit var webSocketManager: WebSocketManager
     private var nightMode: String = "normalmode"
 
@@ -49,7 +50,7 @@ class MainActivity : AppCompatActivity(), WebSocketCallback {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
-
+        val button = binding.nightmodeButton
 
 
         val listener = MyWebSocketListener(this)
@@ -65,15 +66,84 @@ class MainActivity : AppCompatActivity(), WebSocketCallback {
 
         cameraExecutor = Executors.newSingleThreadExecutor()
 
+        button.setOnClickListener {
+            if (nightMode == "normalmode") {
+                button.text = "nightmode: on"
+                nightMode = "NIGHT_MODE"
+            } else {
+                button.text = "nightmode: off"
+                nightMode = "normalmode"
+            }
+        }
+
+
+        //update ui images
+        temporarySigns.myList.observe(this, Observer { array ->
+            binding.imageContainerTemporary.removeAllViews()
+
+            array.forEach { imageName ->
+                val imageResource = resources.getIdentifier(imageName, "drawable", packageName)
+
+                if (imageResource != 0) {
+                    val imageView = ImageView(this).apply {
+                        setImageResource(imageResource)
+                        layoutParams = LinearLayout.LayoutParams(
+                            200,
+                            200
+                        ).apply {
+                            marginStart = 8
+                            marginEnd = 8
+                        }
+                    }
+
+                    binding.imageContainerTemporary.addView(imageView)
+                } else {
+                    Log.e(TAG, "no image with name $imageName")
+                }
+            }
+        })
     }
 
     override fun onMessageReceived(message: String) {
+        runOnUiThread {
+            val jsonArray = JSONArray(message)
+            val newBoxList: MutableList<BoundingBox> = mutableListOf()
+            val listOfSigns: MutableList<String> = mutableListOf()
 
+            for (i in 0 until jsonArray.length()) {
+                val jsonObject = jsonArray.getJSONObject(i)
+                val className = turnStringToImageName(jsonObject.getString("class"))
+                val bbox = jsonObject.getJSONArray("bbox")
+                val confidence = jsonObject.getDouble("confidence")
+
+                if (confidence < 0.8) { //break if confidence is to small
+                    break
+                }
+
+                // Extrahieren der einzelnen Koordinaten (x1, y1, x2, y2)
+                val x1 = bbox.getDouble(0)
+                val y1 = bbox.getDouble(1)
+                val x2 = bbox.getDouble(2)
+                val y2 = bbox.getDouble(3)
+
+                val newBox = BoundingBox(x1.toFloat(),y1.toFloat(),x2.toFloat(),y2.toFloat(),0.0f,0.0f,0.0f,0.0f,0.0f,0, className)
+                newBoxList.add(newBox)
+
+                listOfSigns.add(className)
+            }
+
+            binding.overlay.apply {
+                setResults(newBoxList)
+                invalidate()
+            }
+
+            temporarySigns.updateList(listOfSigns)
+        }
     }
 
     override fun onError(error: String) {
         runOnUiThread {
-            Toast.makeText(this, "Fehler: $error", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "error: $error", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -198,6 +268,14 @@ class MainActivity : AppCompatActivity(), WebSocketCallback {
         private val REQUIRED_PERMISSIONS = mutableListOf (
             Manifest.permission.CAMERA
         ).toTypedArray()
+    }
+
+    private fun turnStringToImageName(str: String): String {
+        var modifiedStr = str.replace(" ", "_")
+        modifiedStr = modifiedStr.replace("(", "")
+        modifiedStr = modifiedStr.replace(")", "")
+
+        return modifiedStr
     }
 
 }

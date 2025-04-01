@@ -49,5 +49,53 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"/>
 
+    <LinearLayout
+        android:id="@+id/displayContainer"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:background="#f8f9fb"
+        android:gravity="center"
+        android:orientation="vertical"
+        android:translationZ="10dp"
+        android:visibility="visible"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintHorizontal_bias="0.5"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/view_finder"
+        app:layout_constraintVertical_bias="0.5">
 
+        <Button
+            android:id="@+id/nightmodeButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:gravity="end"
+            android:text="nightmode: off" />
+
+
+        <LinearLayout
+            android:id="@+id/imageContainer"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:background="#f8f9fb"
+            android:gravity="center"
+            android:orientation="horizontal"
+            android:translationZ="10dp"
+            android:visibility="visible">
+
+        </LinearLayout>
+
+
+        <LinearLayout
+            android:id="@+id/imageContainerTemporary"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:background="#f8f9fb"
+            android:gravity="center"
+            android:orientation="horizontal"
+            android:translationZ="10dp"
+            android:visibility="visible"/>
+    </LinearLayout>
 </androidx.constraintlayout.widget.ConstraintLayout>
