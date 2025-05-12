@@ -27,10 +27,7 @@ import android.widget.Toast
 import androidx.lifecycle.Observer
 import androidx.activity.viewModels
 import org.json.JSONArray
-import org.json.JSONObject
-
 import java.io.ByteArrayOutputStream
-
 
 class MainActivity : AppCompatActivity(), WebSocketCallback {
     private lateinit var binding: ActivityMainBinding
@@ -43,6 +40,15 @@ class MainActivity : AppCompatActivity(), WebSocketCallback {
     private val temporarySigns: TemporarySigns by viewModels()
     private lateinit var webSocketManager: WebSocketManager
     private var nightMode: String = "normalmode"
+    private val handler = android.os.Handler()
+
+    private var lastDisplayedSigns: List<String> = emptyList()
+    private var lastDetectedSigns: List<String> = emptyList()
+    private var lastDetectionTime: Long = 0L
+
+    private val signTimestamps = mutableMapOf<String, Long>()
+    private val displayedImages = mutableMapOf<String, ImageView>()
+    private val signDisplayDuration = 2000L // 2 Sekunden
 
     private lateinit var cameraExecutor: ExecutorService
 
@@ -50,12 +56,11 @@ class MainActivity : AppCompatActivity(), WebSocketCallback {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
+
         val button = binding.nightmodeButton
 
-
         val listener = MyWebSocketListener(this)
-        webSocketManager = WebSocketManager("ws://adrianstoj.ddns.net:8765",listener, this)
-
+        webSocketManager = WebSocketManager("ws://192.168.85.208:8765", listener, this)
         webSocketManager.connect()
 
         if (allPermissionsGranted()) {
@@ -76,29 +81,43 @@ class MainActivity : AppCompatActivity(), WebSocketCallback {
             }
         }
 
+        temporarySigns.myList.observe(this, Observer { detectedSigns ->
+            val currentTime = System.currentTimeMillis()
 
-        //update ui images
-        temporarySigns.myList.observe(this, Observer { array ->
-            binding.imageContainerTemporary.removeAllViews()
+            // Update Zeitstempel für erkannte Schilder
+            detectedSigns.forEach { sign ->
+                signTimestamps[sign] = currentTime
 
-            array.forEach { imageName ->
-                val imageResource = resources.getIdentifier(imageName, "drawable", packageName)
-
-                if (imageResource != 0) {
-                    val imageView = ImageView(this).apply {
-                        setImageResource(imageResource)
-                        layoutParams = LinearLayout.LayoutParams(
-                            200,
-                            200
-                        ).apply {
-                            marginStart = 8
-                            marginEnd = 8
+                // Wenn Schild NEU ist → hinzufügen
+                if (!displayedImages.containsKey(sign)) {
+                    val imageResource = resources.getIdentifier(sign, "drawable", packageName)
+                    if (imageResource != 0) {
+                        val imageView = ImageView(this).apply {
+                            setImageResource(imageResource)
+                            layoutParams = LinearLayout.LayoutParams(200, 200).apply {
+                                marginStart = 8
+                                marginEnd = 8
+                            }
                         }
+                        binding.imageContainerTemporary.addView(imageView)
+                        displayedImages[sign] = imageView
+                        Log.d(TAG, "Added image: $sign")
+                    } else {
+                        Log.e(TAG, "No image found for: $sign")
                     }
+                }
+            }
 
-                    binding.imageContainerTemporary.addView(imageView)
-                } else {
-                    Log.e(TAG, "no image with name $imageName")
+            // Entferne Schilder, die seit >2 Sekunden nicht mehr erkannt wurden
+            val iterator = displayedImages.iterator()
+            while (iterator.hasNext()) {
+                val (sign, imageView) = iterator.next()
+                val lastSeen = signTimestamps[sign] ?: 0
+                if (currentTime - lastSeen > signDisplayDuration) {
+                    binding.imageContainerTemporary.removeView(imageView)
+                    iterator.remove()
+                    signTimestamps.remove(sign)
+                    Log.d(TAG, "Removed image: $sign after timeout")
                 }
             }
         })
@@ -116,17 +135,14 @@ class MainActivity : AppCompatActivity(), WebSocketCallback {
                 val bbox = jsonObject.getJSONArray("bbox")
                 val confidence = jsonObject.getDouble("confidence")
 
-                if (confidence < 0.8) { //break if confidence is to small
-                    break
-                }
+                if (confidence < 0.7) break
 
-                // Extrahieren der einzelnen Koordinaten (x1, y1, x2, y2)
                 val x1 = bbox.getDouble(0)
                 val y1 = bbox.getDouble(1)
                 val x2 = bbox.getDouble(2)
                 val y2 = bbox.getDouble(3)
 
-                val newBox = BoundingBox(x1.toFloat(),y1.toFloat(),x2.toFloat(),y2.toFloat(),0.0f,0.0f,0.0f,0.0f,0.0f,0, className)
+                val newBox = BoundingBox(x1.toFloat(), y1.toFloat(), x2.toFloat(), y2.toFloat(), 0f, 0f, 0f, 0f, 0f, 0, className)
                 newBoxList.add(newBox)
 
                 listOfSigns.add(className)
@@ -147,7 +163,7 @@ class MainActivity : AppCompatActivity(), WebSocketCallback {
         }
     }
 
-    fun sendBinaryMessageToWebSocket(header: String,message: ByteArray) {
+    fun sendBinaryMessageToWebSocket(header: String, message: ByteArray) {
         webSocketManager.sendBinaryData(header, message)
     }
 
@@ -155,11 +171,10 @@ class MainActivity : AppCompatActivity(), WebSocketCallback {
         webSocketManager.sendMessage(message)
     }
 
-
     private fun startCamera() {
         val cameraProviderFuture = ProcessCameraProvider.getInstance(this)
         cameraProviderFuture.addListener({
-            cameraProvider  = cameraProviderFuture.get()
+            cameraProvider = cameraProviderFuture.get()
             bindCameraUseCases()
         }, ContextCompat.getMainExecutor(this))
     }
@@ -169,12 +184,11 @@ class MainActivity : AppCompatActivity(), WebSocketCallback {
 
         val rotation = binding.viewFinder.display.rotation
 
-        val cameraSelector = CameraSelector
-            .Builder()
+        val cameraSelector = CameraSelector.Builder()
             .requireLensFacing(CameraSelector.LENS_FACING_BACK)
             .build()
 
-        preview =  Preview.Builder()
+        preview = Preview.Builder()
             .setTargetAspectRatio(AspectRatio.RATIO_4_3)
             .setTargetRotation(rotation)
             .build()
@@ -182,36 +196,30 @@ class MainActivity : AppCompatActivity(), WebSocketCallback {
         imageAnalyzer = ImageAnalysis.Builder()
             .setTargetAspectRatio(AspectRatio.RATIO_4_3)
             .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-            .setTargetRotation(binding.viewFinder.display.rotation)
+            .setTargetRotation(rotation)
             .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888)
             .build()
 
         imageAnalyzer?.setAnalyzer(cameraExecutor) { imageProxy ->
-            val bitmapBuffer =
-                Bitmap.createBitmap(
-                    imageProxy.width,
-                    imageProxy.height,
-                    Bitmap.Config.ARGB_8888
-                )
-            imageProxy.use { bitmapBuffer.copyPixelsFromBuffer(imageProxy.planes[0].buffer) }
+            val bitmapBuffer = Bitmap.createBitmap(
+                imageProxy.width,
+                imageProxy.height,
+                Bitmap.Config.ARGB_8888
+            )
+            imageProxy.use {
+                bitmapBuffer.copyPixelsFromBuffer(imageProxy.planes[0].buffer)
+            }
             imageProxy.close()
 
             val matrix = Matrix().apply {
                 postRotate(imageProxy.imageInfo.rotationDegrees.toFloat())
-
                 if (isFrontCamera) {
-                    postScale(
-                        -1f,
-                        1f,
-                        imageProxy.width.toFloat(),
-                        imageProxy.height.toFloat()
-                    )
+                    postScale(-1f, 1f, imageProxy.width.toFloat(), imageProxy.height.toFloat())
                 }
             }
 
             val rotatedBitmap = Bitmap.createBitmap(
-                bitmapBuffer, 0, 0, bitmapBuffer.width, bitmapBuffer.height,
-                matrix, true
+                bitmapBuffer, 0, 0, bitmapBuffer.width, bitmapBuffer.height, matrix, true
             )
 
             sendBinaryMessageToWebSocket(nightMode, bitmapToByteArray(rotatedBitmap))
@@ -220,15 +228,9 @@ class MainActivity : AppCompatActivity(), WebSocketCallback {
         cameraProvider.unbindAll()
 
         try {
-            camera = cameraProvider.bindToLifecycle(
-                this,
-                cameraSelector,
-                preview,
-                imageAnalyzer
-            )
-
+            camera = cameraProvider.bindToLifecycle(this, cameraSelector, preview, imageAnalyzer)
             preview?.setSurfaceProvider(binding.viewFinder.surfaceProvider)
-        } catch(exc: Exception) {
+        } catch (exc: Exception) {
             Log.e(TAG, "Use case binding failed", exc)
         }
     }
@@ -245,7 +247,7 @@ class MainActivity : AppCompatActivity(), WebSocketCallback {
 
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()) {
-        if (it[Manifest.permission.CAMERA] == true) { startCamera() }
+        if (it[Manifest.permission.CAMERA] == true) startCamera()
     }
 
     override fun onDestroy() {
@@ -255,7 +257,7 @@ class MainActivity : AppCompatActivity(), WebSocketCallback {
 
     override fun onResume() {
         super.onResume()
-        if (allPermissionsGranted()){
+        if (allPermissionsGranted()) {
             startCamera()
         } else {
             requestPermissionLauncher.launch(REQUIRED_PERMISSIONS)
@@ -265,17 +267,10 @@ class MainActivity : AppCompatActivity(), WebSocketCallback {
     companion object {
         private const val TAG = "Camera"
         private const val REQUEST_CODE_PERMISSIONS = 10
-        private val REQUIRED_PERMISSIONS = mutableListOf (
-            Manifest.permission.CAMERA
-        ).toTypedArray()
+        private val REQUIRED_PERMISSIONS = arrayOf(Manifest.permission.CAMERA)
     }
 
     private fun turnStringToImageName(str: String): String {
-        var modifiedStr = str.replace(" ", "_")
-        modifiedStr = modifiedStr.replace("(", "")
-        modifiedStr = modifiedStr.replace(")", "")
-
-        return modifiedStr
+        return str.replace(" ", "_").replace("(", "").replace(")", "")
     }
-
 }
