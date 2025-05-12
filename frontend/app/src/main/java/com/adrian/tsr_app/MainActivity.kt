@@ -40,15 +40,10 @@ class MainActivity : AppCompatActivity(), WebSocketCallback {
     private val temporarySigns: TemporarySigns by viewModels()
     private lateinit var webSocketManager: WebSocketManager
     private var nightMode: String = "normalmode"
-    private val handler = android.os.Handler()
-
-    private var lastDisplayedSigns: List<String> = emptyList()
-    private var lastDetectedSigns: List<String> = emptyList()
-    private var lastDetectionTime: Long = 0L
 
     private val signTimestamps = mutableMapOf<String, Long>()
     private val displayedImages = mutableMapOf<String, ImageView>()
-    private val signDisplayDuration = 2000L // 2 Sekunden
+    private val signDisplayDuration = 2000L
 
     private lateinit var cameraExecutor: ExecutorService
 
@@ -59,9 +54,23 @@ class MainActivity : AppCompatActivity(), WebSocketCallback {
 
         val button = binding.nightmodeButton
 
-        val listener = MyWebSocketListener(this)
-        webSocketManager = WebSocketManager("ws://192.168.85.208:8765", listener, this)
-        webSocketManager.connect()
+        binding.ipInput.setOnEditorActionListener { _, _, _ ->
+            val ipInput = binding.ipInput.text.toString().trim()
+
+            if (ipInput.isNotEmpty()) {
+                val cleanedIp = ipInput.removePrefix("ws://").removePrefix("wss://").split(":")[0]
+                val fullUrl = "ws://$cleanedIp:8765"
+
+                val listener = MyWebSocketListener(this)
+                webSocketManager = WebSocketManager(fullUrl, listener, this)
+                webSocketManager.connect()
+
+                Toast.makeText(this, "Verbinde mit $fullUrl", Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(this, "Bitte eine IP-Adresse eingeben", Toast.LENGTH_SHORT).show()
+            }
+            true
+        }
 
         if (allPermissionsGranted()) {
             startCamera()
@@ -84,11 +93,11 @@ class MainActivity : AppCompatActivity(), WebSocketCallback {
         temporarySigns.myList.observe(this, Observer { detectedSigns ->
             val currentTime = System.currentTimeMillis()
 
-            // Update Zeitstempel für erkannte Schilder
+
             detectedSigns.forEach { sign ->
                 signTimestamps[sign] = currentTime
 
-                // Wenn Schild NEU ist → hinzufügen
+
                 if (!displayedImages.containsKey(sign)) {
                     val imageResource = resources.getIdentifier(sign, "drawable", packageName)
                     if (imageResource != 0) {
@@ -108,7 +117,6 @@ class MainActivity : AppCompatActivity(), WebSocketCallback {
                 }
             }
 
-            // Entferne Schilder, die seit >2 Sekunden nicht mehr erkannt wurden
             val iterator = displayedImages.iterator()
             while (iterator.hasNext()) {
                 val (sign, imageView) = iterator.next()
@@ -222,7 +230,9 @@ class MainActivity : AppCompatActivity(), WebSocketCallback {
                 bitmapBuffer, 0, 0, bitmapBuffer.width, bitmapBuffer.height, matrix, true
             )
 
-            sendBinaryMessageToWebSocket(nightMode, bitmapToByteArray(rotatedBitmap))
+            if (::webSocketManager.isInitialized) {
+                sendBinaryMessageToWebSocket(nightMode, bitmapToByteArray(rotatedBitmap))
+            }
         }
 
         cameraProvider.unbindAll()
