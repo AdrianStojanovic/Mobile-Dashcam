@@ -11,7 +11,7 @@ from ultralytics import YOLO
 from constants import class_names
 
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
-from models.zero_DCE import model
+from models.zero_DCE_plus import model
 
 def load_mobilenet_model(model_path, num_classes, device):
     if not os.path.exists(model_path):
@@ -56,17 +56,18 @@ def classify_image(image_tensor, device, class_names, model_mobileNet):
 
 def enhance_image(image_pil, device):
     os.environ['CUDA_VISIBLE_DEVICES'] = '0'
+    scale_factor = 4
     data_lowlight = torch.from_numpy(np.asarray(image_pil) / 255.0).float()
     data_lowlight = data_lowlight.permute(2, 0, 1).unsqueeze(0).to(device)
     
-    DCE_net = model.enhance_net_nopool().to(device)
-    DCE_net.load_state_dict(torch.load('service/snapshots/Epoch99.pth'))
+    DCE_net = model.enhance_net_nopool(scale_factor).to(device)
+    DCE_net.load_state_dict(torch.load('service/snapshots/Epoch99plus.pth'))
     
     with torch.no_grad():
-        _, enhanced_image, _ = DCE_net(data_lowlight)
+        enhanced_image, _ = DCE_net(data_lowlight)
     
     enhanced_pil = transforms.ToPILImage()(enhanced_image.squeeze().cpu())
-    os.makedirs("tmp", exist_ok=True)
+
 
     return enhanced_pil
 
