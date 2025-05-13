@@ -65,9 +65,9 @@ class MainActivity : AppCompatActivity(), WebSocketCallback {
                 webSocketManager = WebSocketManager(fullUrl, listener, this)
                 webSocketManager.connect()
 
-                Toast.makeText(this, "Verbinde mit $fullUrl", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "Connect with $fullUrl", Toast.LENGTH_SHORT).show()
             } else {
-                Toast.makeText(this, "Bitte eine IP-Adresse eingeben", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "Enter your backend IP", Toast.LENGTH_SHORT).show()
             }
             true
         }
@@ -282,5 +282,11 @@ class MainActivity : AppCompatActivity(), WebSocketCallback {
 
     private fun turnStringToImageName(str: String): String {
         return str.replace(" ", "_").replace("(", "").replace(")", "")
+    }
+
+    override fun onConnected() {
+        runOnUiThread {
+            Toast.makeText(this, "WebSocket connected!", Toast.LENGTH_SHORT).show()
+        }
     }
 }
