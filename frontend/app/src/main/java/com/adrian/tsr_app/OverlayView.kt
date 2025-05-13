@@ -72,6 +72,7 @@ class OverlayView(context: Context?, attrs: AttributeSet?) : View(context, attrs
             textBackgroundPaint.getTextBounds(drawableText, 0, drawableText.length, bounds)
             val textWidth = bounds.width()
             val textHeight = bounds.height()
+            /**
             canvas.drawRect(
                 scaledX1,
                 scaledY1,
@@ -79,7 +80,8 @@ class OverlayView(context: Context?, attrs: AttributeSet?) : View(context, attrs
                 scaledY1 + textHeight + BOUNDING_RECT_TEXT_PADDING,
                 textBackgroundPaint
             )
-            canvas.drawText(drawableText, scaledX1, scaledY1 + bounds.height(), textPaint)
+            **/
+            //canvas.drawText(drawableText, scaledX1, scaledY1 + bounds.height(), textPaint)
 
         }
     }

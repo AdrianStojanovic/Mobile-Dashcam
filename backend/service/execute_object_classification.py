@@ -87,8 +87,8 @@ def process_image(image_pil, device, model_yolo, model_mobileNet, class_names):
             if cropped_img.shape[0] > 0 and cropped_img.shape[1] > 0:
                 cropped_pil = Image.fromarray(cv2.cvtColor(cropped_img, cv2.COLOR_BGR2RGB))
 
-                input_tensor = transform_image(cropped_pil)
-                predicted_class = classify_image(input_tensor, device, class_names, model_mobileNet)
+                class_id = int(box.cls[0].item())
+                predicted_class = model_yolo.model.names[class_id] 
                 
                 detected_objects.append({
                     "class": predicted_class,

@@ -25,6 +25,8 @@ class WebSocketManager(
                 override fun onOpen(webSocket: WebSocket, response: Response) {
                     println("WebSocket connected!")
                     reconnectAttempts = 0
+
+                    callback.onConnected()
                 }
 
                 override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {

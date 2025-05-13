@@ -21,8 +21,8 @@ def load_mobilenet_model(model_path, num_classes, device):
     return model_mobileNet
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-model_yolo = YOLO("models/YOLO/trained_model.pt")
-model_mobileNet = load_mobilenet_model("models/mobileNetV2/mobilenetv2_trained_model.pth", len(class_names), device)
+model_yolo = YOLO("models/YOLO/yolo_bestTraining3.pt")
+model_mobileNet = load_mobilenet_model("models/mobileNetV2/mobilenetv2_trained_model25.pth", len(class_names), device)
 
 def clean_detected_classes(detected_classes):
     cleaned_classes = []

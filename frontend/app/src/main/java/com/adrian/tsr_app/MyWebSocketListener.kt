@@ -6,7 +6,8 @@ import okio.ByteString
 class MyWebSocketListener(private val callback: WebSocketCallback) : WebSocketListener() {
 
     override fun onOpen(webSocket: WebSocket, response: Response) {
-        Log.d("WebSocket", "WebSocket Connected")
+        super.onOpen(webSocket, response)
+        callback.onConnected()
     }
 
     override fun onMessage(webSocket: WebSocket, text: String) {
