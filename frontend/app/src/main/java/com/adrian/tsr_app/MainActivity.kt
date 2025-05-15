@@ -143,7 +143,7 @@ class MainActivity : AppCompatActivity(), WebSocketCallback {
                 val bbox = jsonObject.getJSONArray("bbox")
                 val confidence = jsonObject.getDouble("confidence")
 
-                if (confidence < 0.7) break
+                if (confidence < 0.8) break
 
                 val x1 = bbox.getDouble(0)
                 val y1 = bbox.getDouble(1)
